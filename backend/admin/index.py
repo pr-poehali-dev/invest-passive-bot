@@ -93,6 +93,32 @@ def handler(event: dict, context) -> dict:
                 users = cursor.fetchall()
                 result = {'users': [dict(u) for u in users]}
             
+            elif action == 'user_details':
+                user_id = event.get('queryStringParameters', {}).get('user_id')
+                if not user_id:
+                    result = {'error': 'user_id required'}
+                else:
+                    cursor.execute(f'SELECT * FROM {schema}.users WHERE telegram_id = %s', (user_id,))
+                    user = cursor.fetchone()
+                    
+                    cursor.execute(
+                        f'SELECT * FROM {schema}.transactions WHERE user_id = %s ORDER BY created_at DESC',
+                        (user_id,)
+                    )
+                    transactions = cursor.fetchall()
+                    
+                    cursor.execute(
+                        f'SELECT * FROM {schema}.deposits WHERE user_id = %s ORDER BY created_at DESC',
+                        (user_id,)
+                    )
+                    deposits = cursor.fetchall()
+                    
+                    result = {
+                        'user': dict(user) if user else None,
+                        'transactions': [dict(t) for t in transactions],
+                        'deposits': [dict(d) for d in deposits]
+                    }
+            
             else:
                 result = {'error': 'Invalid action'}
             
@@ -191,6 +217,34 @@ def handler(event: dict, context) -> dict:
                 
                 conn.commit()
                 result = {'success': True, 'message': 'Transaction rejected'}
+            
+            elif action == 'update_balance':
+                user_id = data.get('user_id')
+                new_balance = data.get('balance')
+                
+                if not user_id or new_balance is None:
+                    result = {'error': 'user_id and balance required'}
+                else:
+                    cursor.execute(
+                        f'UPDATE {schema}.users SET balance = %s, updated_at = CURRENT_TIMESTAMP WHERE telegram_id = %s',
+                        (new_balance, user_id)
+                    )
+                    conn.commit()
+                    result = {'success': True, 'message': 'Balance updated'}
+            
+            elif action == 'update_transaction_status':
+                transaction_id = data.get('transaction_id')
+                new_status = data.get('status')
+                
+                if not transaction_id or not new_status:
+                    result = {'error': 'transaction_id and status required'}
+                else:
+                    cursor.execute(
+                        f"UPDATE {schema}.transactions SET status = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s",
+                        (new_status, transaction_id)
+                    )
+                    conn.commit()
+                    result = {'success': True, 'message': f'Status updated to {new_status}'}
             
             else:
                 result = {'error': 'Invalid action'}

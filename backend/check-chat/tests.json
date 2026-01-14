@@ -1,0 +1,14 @@
+{
+  "tests": [
+    {
+      "name": "Check chat membership",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "user_id": 123456789
+      },
+      "expectedStatus": 200,
+      "bodyMatcher": "partial"
+    }
+  ]
+}

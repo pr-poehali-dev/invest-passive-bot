@@ -160,20 +160,26 @@ export default function Index() {
     window.open('https://t.me/+tDcs_yy5mcU4MTgx', '_blank');
     
     if (!chatJoined && user) {
-      try {
-        await api.createTransaction({
-          action: 'bonus',
-          user_id: user.telegram_id,
-          amount: CHAT_BONUS,
-          bonus_type: 'chat_join'
-        });
-        setChatJoined(true);
-        setInvested(prev => prev + CHAT_BONUS);
-        toast.success(`Получено ${CHAT_BONUS} ₽ за вступление в чат!`);
-        loadTransactions(user.telegram_id);
-      } catch (error) {
-        toast.error('Ошибка начисления бонуса');
-      }
+      setTimeout(async () => {
+        try {
+          const result = await api.checkChatMembership(user.telegram_id);
+          
+          if (result.bonus_already_received) {
+            setChatJoined(true);
+            toast.info('Вы уже получили этот бонус');
+          } else if (result.is_member && result.bonus_received) {
+            setChatJoined(true);
+            setBalance(prev => prev + CHAT_BONUS);
+            setInvested(prev => prev + CHAT_BONUS);
+            toast.success(`Получено ${CHAT_BONUS} ₽ за вступление в чат!`);
+            loadTransactions(user.telegram_id);
+          } else if (!result.is_member) {
+            toast.error('Пожалуйста, вступите в чат чтобы получить бонус');
+          }
+        } catch (error) {
+          toast.error('Ошибка проверки вступления');
+        }
+      }, 3000);
     }
   };
 
