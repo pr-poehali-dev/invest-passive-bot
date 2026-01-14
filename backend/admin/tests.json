@@ -1,0 +1,14 @@
+{
+  "tests": [
+    {
+      "name": "Get admin dashboard without auth",
+      "method": "GET",
+      "path": "/?action=dashboard",
+      "expectedStatus": 401,
+      "expectedBody": {
+        "error": "Admin authentication required"
+      },
+      "bodyMatcher": "partial"
+    }
+  ]
+}

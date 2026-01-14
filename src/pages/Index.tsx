@@ -9,6 +9,9 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import Icon from '@/components/ui/icon';
 import { toast } from 'sonner';
+import { initTelegram, getTelegramUser, getReferralCode } from '@/lib/telegram';
+import { api } from '@/lib/api';
+import AdminPanel from '@/components/AdminPanel';
 
 const DAILY_RATE = 10.6;
 const MIN_DEPOSIT = 100;
@@ -18,6 +21,8 @@ const CHAT_BONUS = 100;
 const INVITE_25_BONUS = 2000;
 
 export default function Index() {
+  const [user, setUser] = useState<any>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [balance, setBalance] = useState(0);
   const [invested, setInvested] = useState(0);
   const [dailyProfit, setDailyProfit] = useState(0);
@@ -30,6 +35,56 @@ export default function Index() {
   const [calculatorAmount, setCalculatorAmount] = useState([1000]);
   const [chatJoined, setChatJoined] = useState(false);
   const [inviteProgress, setInviteProgress] = useState(0);
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    initTelegram();
+    const tgUser = getTelegramUser();
+    const refCode = getReferralCode();
+    
+    if (tgUser) {
+      authenticateUser(tgUser, refCode);
+    } else {
+      setLoading(false);
+    }
+  }, []);
+
+  const authenticateUser = async (tgUser: any, refCode?: string) => {
+    try {
+      const response = await api.auth({
+        telegram_id: tgUser.id,
+        username: tgUser.username,
+        first_name: tgUser.first_name,
+        last_name: tgUser.last_name,
+        referral_code: refCode
+      });
+      
+      if (response.user) {
+        setUser(response.user);
+        setBalance(parseFloat(response.user.balance || 0));
+        setInvested(parseFloat(response.user.invested || 0));
+        setReferralsCount(response.user.referrals_count || 0);
+        setActiveReferrals(response.user.active_referrals || 0);
+        setReferralEarnings(parseFloat(response.user.referral_earnings || 0));
+        setIsAdmin(response.user.is_admin || false);
+        loadTransactions(tgUser.id);
+      }
+    } catch (error) {
+      toast.error('Ошибка авторизации');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadTransactions = async (userId: number) => {
+    try {
+      const response = await api.getTransactions(userId);
+      setTransactions(response.transactions || []);
+    } catch (error) {
+      console.error('Error loading transactions:', error);
+    }
+  };
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -42,15 +97,31 @@ export default function Index() {
     return () => clearInterval(interval);
   }, [invested]);
 
-  const handleDeposit = () => {
+  const handleDeposit = async () => {
     if (depositAmount < MIN_DEPOSIT) {
       toast.error(`Минимальная сумма пополнения ${MIN_DEPOSIT} ₽`);
       return;
     }
-    toast.success(`Заявка на пополнение ${depositAmount} ₽ отправлена на проверку`);
+    
+    if (!user) {
+      toast.error('Необходима авторизация');
+      return;
+    }
+
+    try {
+      await api.createTransaction({
+        action: 'deposit',
+        user_id: user.telegram_id,
+        amount: depositAmount
+      });
+      toast.success(`Заявка на пополнение ${depositAmount} ₽ отправлена на проверку`);
+      loadTransactions(user.telegram_id);
+    } catch (error) {
+      toast.error('Ошибка отправки заявки');
+    }
   };
 
-  const handleWithdraw = () => {
+  const handleWithdraw = async () => {
     if (withdrawAmount < MIN_WITHDRAWAL) {
       toast.error(`Минимальная сумма вывода ${MIN_WITHDRAWAL} ₽`);
       return;
@@ -59,23 +130,104 @@ export default function Index() {
       toast.error('Недостаточно средств');
       return;
     }
-    setBalance(prev => prev - withdrawAmount);
-    setTotalWithdrawn(prev => prev + withdrawAmount);
-    toast.success(`Заявка на вывод ${withdrawAmount} ₽ отправлена`);
+    
+    if (!user) {
+      toast.error('Необходима авторизация');
+      return;
+    }
+
+    try {
+      await api.createTransaction({
+        action: 'withdraw',
+        user_id: user.telegram_id,
+        amount: withdrawAmount,
+        card_number: '****'
+      });
+      toast.success(`Заявка на вывод ${withdrawAmount} ₽ отправлена`);
+      loadTransactions(user.telegram_id);
+    } catch (error) {
+      toast.error('Ошибка отправки заявки');
+    }
   };
 
   const copyReferralLink = () => {
-    const link = `https://t.me/InvestPassiveBot?start=ref${Math.random().toString(36).substr(2, 9)}`;
+    const link = `https://t.me/InvestPassiveBot?start=${user?.referral_code || 'demo'}`;
     navigator.clipboard.writeText(link);
     toast.success('Реферальная ссылка скопирована!');
   };
 
-  const joinChat = () => {
+  const joinChat = async () => {
     window.open('https://t.me/+tDcs_yy5mcU4MTgx', '_blank');
-    setChatJoined(true);
-    setBalance(prev => prev + CHAT_BONUS);
-    toast.success(`Получено ${CHAT_BONUS} ₽ за вступление в чат!`);
+    
+    if (!chatJoined && user) {
+      try {
+        await api.createTransaction({
+          action: 'bonus',
+          user_id: user.telegram_id,
+          amount: CHAT_BONUS,
+          bonus_type: 'chat_join'
+        });
+        setChatJoined(true);
+        setInvested(prev => prev + CHAT_BONUS);
+        toast.success(`Получено ${CHAT_BONUS} ₽ за вступление в чат!`);
+        loadTransactions(user.telegram_id);
+      } catch (error) {
+        toast.error('Ошибка начисления бонуса');
+      }
+    }
   };
+
+  const getTransactionIcon = (type: string) => {
+    switch (type) {
+      case 'deposit': return 'ArrowUpToLine';
+      case 'withdrawal': return 'ArrowDownToLine';
+      case 'bonus': return 'Gift';
+      default: return 'CircleDollarSign';
+    }
+  };
+
+  const getTransactionColor = (type: string) => {
+    switch (type) {
+      case 'deposit': return 'green';
+      case 'withdrawal': return 'orange';
+      case 'bonus': return 'purple';
+      default: return 'blue';
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return <Badge className="bg-green-500/20 text-green-400 border-green-500/30">Успешно</Badge>;
+      case 'pending':
+        return <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30">Ожидание</Badge>;
+      case 'rejected':
+        return <Badge className="bg-red-500/20 text-red-400 border-red-500/30">Отменено</Badge>;
+      default:
+        return <Badge variant="outline">{status}</Badge>;
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#1a1f2e] via-[#1e2536] to-[#0f1419] text-white flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-16 h-16 rounded-full gradient-primary animate-pulse mx-auto mb-4" />
+          <p className="text-lg">Загрузка...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (isAdmin) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-[#1a1f2e] via-[#1e2536] to-[#0f1419] text-white">
+        <div className="max-w-7xl mx-auto p-4 space-y-6">
+          <AdminPanel userId={user?.telegram_id} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#1a1f2e] via-[#1e2536] to-[#0f1419] text-white">
@@ -195,20 +347,32 @@ export default function Index() {
                 История операций
               </h3>
               <div className="space-y-3">
-                <div className="flex items-center justify-between p-3 bg-background/30 rounded-lg">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
-                      <Icon name="ArrowDownToLine" size={18} className="text-green-400" />
-                    </div>
-                    <div>
-                      <p className="font-medium">Начисление процентов</p>
-                      <p className="text-xs text-muted-foreground">Сегодня, 14:32</p>
-                    </div>
-                  </div>
-                  <Badge variant="outline" className="border-green-500/50 text-green-400">
-                    +{dailyProfit.toFixed(2)} ₽
-                  </Badge>
-                </div>
+                {transactions.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-4">Нет операций</p>
+                ) : (
+                  transactions.slice(0, 5).map((tx: any) => {
+                    const color = getTransactionColor(tx.type);
+                    return (
+                      <div key={tx.id} className="flex items-center justify-between p-3 bg-background/30 rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-full bg-${color}-500/20 flex items-center justify-center`}>
+                            <Icon name={getTransactionIcon(tx.type)} size={18} className={`text-${color}-400`} />
+                          </div>
+                          <div>
+                            <p className="font-medium">{tx.description}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {new Date(tx.created_at).toLocaleDateString('ru-RU')}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="font-bold">{tx.type === 'withdrawal' ? '-' : '+'}{tx.amount} ₽</p>
+                          {getStatusBadge(tx.status)}
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </Card>
           </TabsContent>
@@ -230,7 +394,7 @@ export default function Index() {
                 </div>
                 <div className="text-center">
                   <p className="text-sm text-muted-foreground mb-1">Доход в сутки</p>
-                  <p className="text-2xl font-bold gradient-primary bg-clip-text text-transparent">
+                  <p className="text-2xl font-bold text-white">
                     {((invested * DAILY_RATE) / 100).toFixed(2)} ₽
                   </p>
                 </div>
@@ -330,18 +494,6 @@ export default function Index() {
                 </Button>
               </div>
             </Card>
-
-            <Card className="p-6 bg-card/50 backdrop-blur-lg border-primary/10">
-              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <Icon name="CreditCard" size={20} className="text-secondary" />
-                Реквизиты
-              </h3>
-              <p className="text-sm text-muted-foreground">Управление методами вывода</p>
-              <Button variant="outline" className="w-full mt-4 border-primary/20">
-                <Icon name="Plus" size={18} className="mr-2" />
-                Добавить реквизиты
-              </Button>
-            </Card>
           </TabsContent>
 
           <TabsContent value="referrals" className="space-y-4 animate-slide-up">
@@ -361,7 +513,7 @@ export default function Index() {
                 </div>
                 <div className="text-center">
                   <p className="text-sm text-muted-foreground mb-1">Доход</p>
-                  <p className="text-2xl font-bold gradient-primary bg-clip-text text-transparent">
+                  <p className="text-2xl font-bold text-white">
                     {referralEarnings.toFixed(2)} ₽
                   </p>
                 </div>
@@ -386,7 +538,7 @@ export default function Index() {
               <div className="flex gap-3">
                 <Input
                   readOnly
-                  value={`t.me/InvestPassiveBot?start=ref${Math.random().toString(36).substr(2, 6)}`}
+                  value={`t.me/InvestPassiveBot?start=${user?.referral_code || 'demo'}`}
                   className="bg-background/50 border-primary/20"
                 />
                 <Button onClick={copyReferralLink} className="gradient-primary">

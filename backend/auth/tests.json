@@ -1,0 +1,23 @@
+{
+  "tests": [
+    {
+      "name": "Auth new user",
+      "method": "POST",
+      "path": "/",
+      "body": {
+        "telegram_id": 123456789,
+        "username": "testuser",
+        "first_name": "Test",
+        "last_name": "User"
+      },
+      "expectedStatus": 200,
+      "expectedBody": {
+        "user": {
+          "telegram_id": 123456789
+        },
+        "token": "string"
+      },
+      "bodyMatcher": "partial"
+    }
+  ]
+}
