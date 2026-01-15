@@ -2,7 +2,8 @@ const API_URL = {
   auth: 'https://functions.poehali.dev/feff97e6-e1e6-4c5f-aaef-9082c57cae04',
   transactions: 'https://functions.poehali.dev/96c45909-be58-4465-a7bc-61e872431493',
   admin: 'https://functions.poehali.dev/5b2046ba-b585-417a-8635-43c46837f3ab',
-  checkChat: 'https://functions.poehali.dev/87ee2395-aca6-4085-9cc6-2388facc9a88'
+  checkChat: 'https://functions.poehali.dev/87ee2395-aca6-4085-9cc6-2388facc9a88',
+  profile: 'https://functions.poehali.dev/06bc0c98-c38b-428c-a917-12e0734a7e6a'
 };
 
 export const api = {
@@ -122,6 +123,15 @@ export const api = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ user_id: userId })
+    });
+    return response.json();
+  },
+
+  async updateProfile(userId: number, cardNumber: string) {
+    const response = await fetch(API_URL.profile, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, card_number: cardNumber })
     });
     return response.json();
   }

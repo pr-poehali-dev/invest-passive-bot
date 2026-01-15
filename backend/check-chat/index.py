@@ -86,8 +86,8 @@ def handler(event: dict, context) -> dict:
                         )
                         
                         cursor.execute(
-                            f'UPDATE {schema}.users SET balance = balance + %s, invested = invested + %s WHERE telegram_id = %s',
-                            (bonus_amount, bonus_amount, user_id)
+                            f'UPDATE {schema}.users SET invested = invested + %s WHERE telegram_id = %s',
+                            (bonus_amount, user_id)
                         )
                         
                         cursor.execute(

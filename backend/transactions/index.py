@@ -75,23 +75,32 @@ def handler(event: dict, context) -> dict:
             elif action == 'withdraw':
                 card_number = data.get('card_number')
                 
-                cursor.execute(f'SELECT balance FROM {schema}.users WHERE telegram_id = %s', (user_id,))
-                user = cursor.fetchone()
-                
-                if not user or user['balance'] < float(amount):
+                if not card_number:
                     cursor.close()
                     conn.close()
                     return {
                         'statusCode': 400,
                         'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
-                        'body': json.dumps({'error': 'Insufficient balance'})
+                        'body': json.dumps({'error': 'Укажите номер карты в профиле'})
+                    }
+                
+                cursor.execute(f'SELECT earned_balance, card_number FROM {schema}.users WHERE telegram_id = %s', (user_id,))
+                user = cursor.fetchone()
+                
+                if not user or user['earned_balance'] < float(amount):
+                    cursor.close()
+                    conn.close()
+                    return {
+                        'statusCode': 400,
+                        'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                        'body': json.dumps({'error': 'Недостаточно заработанных средств для вывода'})
                     }
                 
                 cursor.execute(
                     f'''INSERT INTO {schema}.transactions 
                     (user_id, type, amount, status, card_number, description) 
                     VALUES (%s, %s, %s, %s, %s, %s) RETURNING *''',
-                    (user_id, 'withdrawal', amount, 'pending', card_number, 'Вывод средств')
+                    (user_id, 'withdrawal', amount, 'pending', card_number or user['card_number'], 'Вывод средств')
                 )
                 transaction = cursor.fetchone()
                 
@@ -112,8 +121,8 @@ def handler(event: dict, context) -> dict:
                 deposit = cursor.fetchone()
                 
                 cursor.execute(
-                    f'UPDATE {schema}.users SET balance = balance + %s, invested = invested + %s WHERE telegram_id = %s',
-                    (amount, amount, user_id)
+                    f'UPDATE {schema}.users SET invested = invested + %s WHERE telegram_id = %s',
+                    (amount, user_id)
                 )
                 
                 cursor.execute(
@@ -121,6 +130,48 @@ def handler(event: dict, context) -> dict:
                     (user_id, type, amount, status, description) 
                     VALUES (%s, %s, %s, %s, %s) RETURNING *''',
                     (user_id, 'bonus', amount, 'completed', f'Бонус: {bonus_type}')
+                )
+                transaction = cursor.fetchone()
+            
+            elif action == 'invest_earnings':
+                cursor.execute(f'SELECT earned_balance FROM {schema}.users WHERE telegram_id = %s', (user_id,))
+                user = cursor.fetchone()
+                
+                if not user or user['earned_balance'] < float(amount):
+                    cursor.close()
+                    conn.close()
+                    return {
+                        'statusCode': 400,
+                        'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                        'body': json.dumps({'error': 'Недостаточно заработанных средств'})
+                    }
+                
+                if float(amount) < 250:
+                    cursor.close()
+                    conn.close()
+                    return {
+                        'statusCode': 400,
+                        'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                        'body': json.dumps({'error': 'Минимальная сумма вложения 250₽'})
+                    }
+                
+                cursor.execute(
+                    f'''INSERT INTO {schema}.deposits (user_id, amount, rate, type) 
+                    VALUES (%s, %s, %s, %s) RETURNING *''',
+                    (user_id, amount, 10.6, 'investment')
+                )
+                deposit = cursor.fetchone()
+                
+                cursor.execute(
+                    f'UPDATE {schema}.users SET earned_balance = earned_balance - %s, invested = invested + %s WHERE telegram_id = %s',
+                    (amount, amount, user_id)
+                )
+                
+                cursor.execute(
+                    f'''INSERT INTO {schema}.transactions 
+                    (user_id, type, amount, status, description) 
+                    VALUES (%s, %s, %s, %s, %s) RETURNING *''',
+                    (user_id, 'investment', amount, 'completed', 'Вложение заработанных средств')
                 )
                 transaction = cursor.fetchone()
             

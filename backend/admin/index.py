@@ -194,7 +194,7 @@ def handler(event: dict, context) -> dict:
                 
                 cursor.execute(
                     f'''UPDATE {schema}.users 
-                    SET balance = balance - %s, updated_at = CURRENT_TIMESTAMP 
+                    SET earned_balance = earned_balance - %s, updated_at = CURRENT_TIMESTAMP 
                     WHERE telegram_id = %s''',
                     (transaction['amount'], transaction['user_id'])
                 )
@@ -220,15 +220,22 @@ def handler(event: dict, context) -> dict:
             
             elif action == 'update_balance':
                 user_id = data.get('user_id')
-                new_balance = data.get('balance')
+                new_earned = data.get('earned_balance')
+                new_deposited = data.get('balance')
                 
-                if not user_id or new_balance is None:
+                if not user_id or (new_earned is None and new_deposited is None):
                     result = {'error': 'user_id and balance required'}
                 else:
-                    cursor.execute(
-                        f'UPDATE {schema}.users SET balance = %s, updated_at = CURRENT_TIMESTAMP WHERE telegram_id = %s',
-                        (new_balance, user_id)
-                    )
+                    if new_earned is not None:
+                        cursor.execute(
+                            f'UPDATE {schema}.users SET earned_balance = %s, updated_at = CURRENT_TIMESTAMP WHERE telegram_id = %s',
+                            (new_earned, user_id)
+                        )
+                    if new_deposited is not None:
+                        cursor.execute(
+                            f'UPDATE {schema}.users SET balance = %s, updated_at = CURRENT_TIMESTAMP WHERE telegram_id = %s',
+                            (new_deposited, user_id)
+                        )
                     conn.commit()
                     result = {'success': True, 'message': 'Balance updated'}
             

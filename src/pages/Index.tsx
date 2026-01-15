@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import Icon from '@/components/ui/icon';
 import { toast } from 'sonner';
 import { initTelegram, getTelegramUser, getReferralCode } from '@/lib/telegram';
@@ -24,7 +25,13 @@ export default function Index() {
   const [user, setUser] = useState<any>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [balance, setBalance] = useState(0);
+  const [earnedBalance, setEarnedBalance] = useState(0);
   const [invested, setInvested] = useState(0);
+  const [cardNumber, setCardNumber] = useState('');
+  const [depositDialogOpen, setDepositDialogOpen] = useState(false);
+  const [withdrawDialogOpen, setWithdrawDialogOpen] = useState(false);
+  const [cardDialogOpen, setCardDialogOpen] = useState(false);
+  const [investEarningsAmount, setInvestEarningsAmount] = useState(250);
   const [dailyProfit, setDailyProfit] = useState(0);
   const [totalWithdrawn, setTotalWithdrawn] = useState(0);
   const [referralsCount, setReferralsCount] = useState(0);
@@ -63,7 +70,9 @@ export default function Index() {
       if (response.user) {
         setUser(response.user);
         setBalance(parseFloat(response.user.balance || 0));
+        setEarnedBalance(parseFloat(response.user.earned_balance || 0));
         setInvested(parseFloat(response.user.invested || 0));
+        setCardNumber(response.user.card_number || '');
         setReferralsCount(response.user.referrals_count || 0);
         setActiveReferrals(response.user.active_referrals || 0);
         setReferralEarnings(parseFloat(response.user.referral_earnings || 0));
@@ -90,7 +99,7 @@ export default function Index() {
     const interval = setInterval(() => {
       if (invested > 0) {
         const increment = (invested * DAILY_RATE) / 100 / 86400;
-        setBalance(prev => prev + increment);
+        setEarnedBalance(prev => prev + increment);
         setDailyProfit(prev => prev + increment);
       }
     }, 1000);
@@ -122,12 +131,18 @@ export default function Index() {
   };
 
   const handleWithdraw = async () => {
+    if (!cardNumber || cardNumber.trim().length < 16) {
+      setCardDialogOpen(true);
+      toast.error('Укажите номер карты в профиле');
+      return;
+    }
+    
     if (withdrawAmount < MIN_WITHDRAWAL) {
       toast.error(`Минимальная сумма вывода ${MIN_WITHDRAWAL} ₽`);
       return;
     }
-    if (withdrawAmount > balance) {
-      toast.error('Недостаточно средств');
+    if (withdrawAmount > earnedBalance) {
+      toast.error('Можно выводить только заработанные средства');
       return;
     }
     
@@ -137,23 +152,74 @@ export default function Index() {
     }
 
     try {
-      await api.createTransaction({
+      const result = await api.createTransaction({
         action: 'withdraw',
         user_id: user.telegram_id,
         amount: withdrawAmount,
-        card_number: '****'
+        card_number: cardNumber
       });
-      toast.success(`Заявка на вывод ${withdrawAmount} ₽ отправлена`);
-      loadTransactions(user.telegram_id);
+      
+      if (result.error) {
+        toast.error(result.error);
+      } else {
+        toast.success(`Заявка на вывод ${withdrawAmount} ₽ отправлена`);
+        setWithdrawDialogOpen(false);
+        loadTransactions(user.telegram_id);
+      }
     } catch (error) {
       toast.error('Ошибка отправки заявки');
     }
   };
 
   const copyReferralLink = () => {
-    const link = `https://t.me/InvestPassiveBot?start=${user?.referral_code || 'demo'}`;
+    const link = `https://t.me/InvestttPassive_bot?start=${user?.referral_code || 'demo'}`;
     navigator.clipboard.writeText(link);
     toast.success('Реферальная ссылка скопирована!');
+  };
+
+  const handleInvestEarnings = async () => {
+    if (investEarningsAmount < 250) {
+      toast.error('Минимальная сумма вложения 250₽');
+      return;
+    }
+    
+    if (investEarningsAmount > earnedBalance) {
+      toast.error('Недостаточно заработанных средств');
+      return;
+    }
+    
+    if (!user) return;
+    
+    try {
+      await api.createTransaction({
+        action: 'invest_earnings',
+        user_id: user.telegram_id,
+        amount: investEarningsAmount
+      });
+      setEarnedBalance(prev => prev - investEarningsAmount);
+      setInvested(prev => prev + investEarningsAmount);
+      toast.success(`Вложено ${investEarningsAmount}₽ в портфель`);
+      loadTransactions(user.telegram_id);
+    } catch (error: any) {
+      toast.error(error.message || 'Ошибка вложения');
+    }
+  };
+
+  const handleUpdateCard = async () => {
+    if (!cardNumber || cardNumber.trim().length < 16) {
+      toast.error('Введите корректный номер карты (16 цифр)');
+      return;
+    }
+    
+    if (!user) return;
+    
+    try {
+      await api.updateProfile(user.telegram_id, cardNumber);
+      toast.success('Номер карты обновлен');
+      setCardDialogOpen(false);
+    } catch (error) {
+      toast.error('Ошибка обновления');
+    }
   };
 
   const joinChat = async () => {
@@ -169,7 +235,6 @@ export default function Index() {
             toast.info('Вы уже получили этот бонус');
           } else if (result.is_member && result.bonus_received) {
             setChatJoined(true);
-            setBalance(prev => prev + CHAT_BONUS);
             setInvested(prev => prev + CHAT_BONUS);
             toast.success(`Получено ${CHAT_BONUS} ₽ за вступление в чат!`);
             loadTransactions(user.telegram_id);
@@ -325,13 +390,48 @@ export default function Index() {
                   <p className="text-xs text-muted-foreground mt-1">Минимум {MIN_DEPOSIT} ₽</p>
                 </div>
                 <div className="flex gap-3">
-                  <Button onClick={handleDeposit} className="gradient-primary flex-1">
-                    <Icon name="Plus" size={18} className="mr-2" />
-                    Пополнить баланс
-                  </Button>
-                  <Button variant="outline" className="border-primary/20">
-                    Проверить оплату
-                  </Button>
+                  <Dialog open={depositDialogOpen} onOpenChange={setDepositDialogOpen}>
+                    <DialogTrigger asChild>
+                      <Button className="gradient-primary flex-1">
+                        <Icon name="Plus" size={18} className="mr-2" />
+                        Пополнить баланс
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="bg-[#1e2536] border-primary/20">
+                      <DialogHeader>
+                        <DialogTitle>Реквизиты для пополнения</DialogTitle>
+                        <DialogDescription>
+                          Переведите {depositAmount} ₽ на указанную карту и отправьте заявку
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4 py-4">
+                        <Card className="p-4 bg-primary/10 border-primary/20">
+                          <p className="text-sm text-muted-foreground mb-2">Номер карты для перевода:</p>
+                          <div className="flex items-center justify-between">
+                            <p className="text-xl font-mono font-bold">2202 5463 2371 983</p>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                navigator.clipboard.writeText('220254632371983');
+                                toast.success('Номер карты скопирован');
+                              }}
+                            >
+                              <Icon name="Copy" size={16} />
+                            </Button>
+                          </div>
+                        </Card>
+                        <div className="text-sm text-muted-foreground space-y-1">
+                          <p>1. Переведите <strong>{depositAmount} ₽</strong> на карту выше</p>
+                          <p>2. Нажмите кнопку "Отправить заявку"</p>
+                          <p>3. Ожидайте подтверждения (обычно до 10 минут)</p>
+                        </div>
+                        <Button onClick={handleDeposit} className="w-full gradient-primary">
+                          Отправить заявку на {depositAmount} ₽
+                        </Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
                 </div>
               </div>
             </Card>
@@ -456,17 +556,62 @@ export default function Index() {
                 </div>
               </div>
             </Card>
+
+            <Card className="p-6 bg-card/50 backdrop-blur-lg border-primary/10">
+              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <Icon name="TrendingUp" size={20} className="text-green-400" />
+                Вложить заработанное
+              </h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                Вложите заработанные проценты обратно в портфель для увеличения дохода
+              </p>
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm text-muted-foreground mb-2 block">
+                    Доступно для вложения: {earnedBalance.toFixed(2)} ₽
+                  </label>
+                  <Input
+                    type="number"
+                    value={investEarningsAmount}
+                    onChange={(e) => setInvestEarningsAmount(Number(e.target.value))}
+                    min={250}
+                    max={earnedBalance}
+                    className="bg-background/50 border-primary/20"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">Минимум 250 ₽</p>
+                </div>
+                <Button 
+                  onClick={handleInvestEarnings} 
+                  className="w-full gradient-primary"
+                  disabled={earnedBalance < 250}
+                >
+                  <Icon name="PlusCircle" size={18} className="mr-2" />
+                  Вложить {investEarningsAmount} ₽ в портфель
+                </Button>
+              </div>
+            </Card>
           </TabsContent>
 
           <TabsContent value="wallet" className="space-y-4 animate-slide-up">
-            <Card className="p-6 bg-gradient-to-br from-blue-500/10 to-purple-500/10 border-blue-500/20">
-              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                <Icon name="Wallet" size={20} className="text-blue-400" />
-                Доступно к выводу
-              </h3>
-              <p className="text-4xl font-bold mb-2">{balance.toFixed(2)} ₽</p>
-              <p className="text-sm text-muted-foreground">Только накопленные проценты</p>
-            </Card>
+            <div className="grid grid-cols-2 gap-4">
+              <Card className="p-6 bg-gradient-to-br from-green-500/10 to-blue-500/10 border-green-500/20">
+                <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                  <Icon name="Wallet" size={16} className="text-green-400" />
+                  Пополненный баланс
+                </h3>
+                <p className="text-3xl font-bold mb-1">{balance.toFixed(2)} ₽</p>
+                <p className="text-xs text-muted-foreground">Не начисляет проценты</p>
+              </Card>
+              
+              <Card className="p-6 bg-gradient-to-br from-blue-500/10 to-purple-500/10 border-blue-500/20">
+                <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                  <Icon name="TrendingUp" size={16} className="text-blue-400" />
+                  Заработано
+                </h3>
+                <p className="text-3xl font-bold mb-1">{earnedBalance.toFixed(2)} ₽</p>
+                <p className="text-xs text-muted-foreground">Доступно к выводу</p>
+              </Card>
+            </div>
 
             <Card className="p-6 bg-card/50 backdrop-blur-lg border-primary/10">
               <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
@@ -481,19 +626,40 @@ export default function Index() {
                     value={withdrawAmount}
                     onChange={(e) => setWithdrawAmount(Number(e.target.value))}
                     min={MIN_WITHDRAWAL}
-                    max={balance}
+                    max={earnedBalance}
                     className="bg-background/50 border-primary/20"
                   />
-                  <p className="text-xs text-muted-foreground mt-1">Минимум {MIN_WITHDRAWAL} ₽</p>
+                  <p className="text-xs text-muted-foreground mt-1">Доступно: {earnedBalance.toFixed(2)} ₽ (минимум {MIN_WITHDRAWAL} ₽)</p>
                 </div>
-                <div>
-                  <label className="text-sm text-muted-foreground mb-2 block">Номер карты</label>
-                  <Input
-                    type="text"
-                    placeholder="0000 0000 0000 0000"
-                    className="bg-background/50 border-primary/20"
-                  />
-                </div>
+                <Dialog open={cardDialogOpen} onOpenChange={setCardDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="outline" className="w-full border-primary/20">
+                      <Icon name="CreditCard" size={18} className="mr-2" />
+                      {cardNumber ? `Карта: ${cardNumber.slice(-4)}` : 'Указать номер карты'}
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="bg-[#1e2536] border-primary/20">
+                    <DialogHeader>
+                      <DialogTitle>Номер карты для вывода</DialogTitle>
+                      <DialogDescription>
+                        Укажите номер карты, на которую хотите получать выплаты
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                      <Input
+                        type="text"
+                        placeholder="0000 0000 0000 0000"
+                        value={cardNumber}
+                        onChange={(e) => setCardNumber(e.target.value.replace(/\s/g, ''))}
+                        maxLength={16}
+                        className="bg-background/50"
+                      />
+                      <Button onClick={handleUpdateCard} className="w-full gradient-primary">
+                        Сохранить
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
                 <Button onClick={handleWithdraw} className="w-full gradient-primary">
                   <Icon name="Send" size={18} className="mr-2" />
                   Подать заявку на вывод
@@ -544,7 +710,7 @@ export default function Index() {
               <div className="flex gap-3">
                 <Input
                   readOnly
-                  value={`t.me/InvestPassiveBot?start=${user?.referral_code || 'demo'}`}
+                  value={`t.me/InvestttPassive_bot?start=${user?.referral_code || 'demo'}`}
                   className="bg-background/50 border-primary/20"
                 />
                 <Button onClick={copyReferralLink} className="gradient-primary">

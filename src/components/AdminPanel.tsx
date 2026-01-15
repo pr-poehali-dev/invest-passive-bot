@@ -192,7 +192,22 @@ export default function AdminPanel({ userId }: AdminPanelProps) {
                           Пользователь: {tx.first_name} {tx.last_name} (@{tx.username})
                         </p>
                         {tx.card_number && (
-                          <p className="text-sm text-muted-foreground">Карта: {tx.card_number}</p>
+                          <div className="mt-2 p-2 bg-primary/10 rounded">
+                            <p className="text-xs text-muted-foreground">Реквизиты для вывода:</p>
+                            <p className="text-sm font-mono font-bold">{tx.card_number}</p>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                navigator.clipboard.writeText(tx.card_number);
+                                toast.success('Номер карты скопирован');
+                              }}
+                              className="mt-1 h-6 text-xs"
+                            >
+                              <Icon name="Copy" size={12} className="mr-1" />
+                              Скопировать
+                            </Button>
+                          </div>
                         )}
                         <p className="text-xs text-muted-foreground mt-1">
                           {new Date(tx.created_at).toLocaleString('ru-RU')}

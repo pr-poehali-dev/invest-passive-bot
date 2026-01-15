@@ -1,0 +1,14 @@
+{
+  "tests": [
+    {
+      "name": "Update card without user_id",
+      "method": "POST",
+      "body": {},
+      "expectedStatus": 400,
+      "expectedBody": {
+        "error": "string"
+      },
+      "bodyMatcher": "partial"
+    }
+  ]
+}
