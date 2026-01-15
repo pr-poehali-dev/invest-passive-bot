@@ -134,5 +134,14 @@ export const api = {
       body: JSON.stringify({ user_id: userId, card_number: cardNumber })
     });
     return response.json();
+  },
+
+  async saveEarnedBalance(userId: number, earnedBalance: number) {
+    const response = await fetch(API_URL.profile, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, earned_balance: earnedBalance })
+    });
+    return response.json();
   }
 };

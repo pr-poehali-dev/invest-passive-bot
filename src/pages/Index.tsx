@@ -55,7 +55,16 @@ export default function Index() {
     } else {
       setLoading(false);
     }
-  }, []);
+
+    const handleBeforeUnload = async () => {
+      if (user && earnedBalance > 0) {
+        await api.saveEarnedBalance(user.telegram_id, earnedBalance);
+      }
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [user, earnedBalance]);
 
   const authenticateUser = async (tgUser: any, refCode?: string) => {
     try {
@@ -105,6 +114,19 @@ export default function Index() {
     }, 1000);
     return () => clearInterval(interval);
   }, [invested]);
+
+  useEffect(() => {
+    const saveInterval = setInterval(async () => {
+      if (user && earnedBalance > 0) {
+        try {
+          await api.saveEarnedBalance(user.telegram_id, earnedBalance);
+        } catch (error) {
+          console.error('Error saving earned balance:', error);
+        }
+      }
+    }, 60000);
+    return () => clearInterval(saveInterval);
+  }, [user, earnedBalance]);
 
   const handleDeposit = async () => {
     if (depositAmount < MIN_DEPOSIT) {
@@ -196,8 +218,10 @@ export default function Index() {
         user_id: user.telegram_id,
         amount: investEarningsAmount
       });
-      setEarnedBalance(prev => prev - investEarningsAmount);
+      const newEarnedBalance = earnedBalance - investEarningsAmount;
+      setEarnedBalance(newEarnedBalance);
       setInvested(prev => prev + investEarningsAmount);
+      await api.saveEarnedBalance(user.telegram_id, newEarnedBalance);
       toast.success(`Вложено ${investEarningsAmount}₽ в портфель`);
       loadTransactions(user.telegram_id);
     } catch (error: any) {

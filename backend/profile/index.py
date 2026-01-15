@@ -4,7 +4,7 @@ import psycopg2
 from psycopg2.extras import RealDictCursor
 
 def handler(event: dict, context) -> dict:
-    '''Управление профилем пользователя: обновление данных карты'''
+    '''Управление профилем пользователя: обновление данных карты и сохранение earned_balance'''
     method = event.get('httpMethod', 'GET')
     
     if method == 'OPTIONS':
@@ -31,7 +31,8 @@ def handler(event: dict, context) -> dict:
             body = '{}'
         data = json.loads(body)
         user_id = data.get('user_id')
-        card_number = data.get('card_number', '').strip()
+        card_number = data.get('card_number', '').strip() if data.get('card_number') else None
+        earned_balance = data.get('earned_balance')
         
         if not user_id:
             return {
@@ -51,10 +52,25 @@ def handler(event: dict, context) -> dict:
         cursor = conn.cursor(cursor_factory=RealDictCursor)
         schema = os.environ.get('MAIN_DB_SCHEMA', 'public')
         
-        cursor.execute(
-            f'UPDATE {schema}.users SET card_number = %s WHERE telegram_id = %s RETURNING *',
-            (card_number, user_id)
-        )
+        if card_number is not None:
+            cursor.execute(
+                f'UPDATE {schema}.users SET card_number = %s WHERE telegram_id = %s RETURNING *',
+                (card_number, user_id)
+            )
+        elif earned_balance is not None:
+            cursor.execute(
+                f'UPDATE {schema}.users SET earned_balance = %s WHERE telegram_id = %s RETURNING *',
+                (earned_balance, user_id)
+            )
+        else:
+            cursor.close()
+            conn.close()
+            return {
+                'statusCode': 400,
+                'headers': {'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*'},
+                'body': json.dumps({'error': 'card_number or earned_balance required'})
+            }
+        
         user = cursor.fetchone()
         
         conn.commit()
