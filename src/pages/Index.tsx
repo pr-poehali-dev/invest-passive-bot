@@ -235,6 +235,7 @@ export default function Index() {
             toast.info('Вы уже получили этот бонус');
           } else if (result.is_member && result.bonus_received) {
             setChatJoined(true);
+            setBalance(prev => prev + CHAT_BONUS);
             setInvested(prev => prev + CHAT_BONUS);
             toast.success(`Получено ${CHAT_BONUS} ₽ за вступление в чат!`);
             loadTransactions(user.telegram_id);
@@ -393,13 +394,13 @@ export default function Index() {
                   <Dialog open={depositDialogOpen} onOpenChange={setDepositDialogOpen}>
                     <DialogTrigger asChild>
                       <Button className="gradient-primary flex-1">
-                        <Icon name="Plus" size={18} className="mr-2" />
-                        Пополнить баланс
+                        <Icon name="CreditCard" size={18} className="mr-2" />
+                        Карта
                       </Button>
                     </DialogTrigger>
                     <DialogContent className="bg-[#1e2536] border-primary/20">
                       <DialogHeader>
-                        <DialogTitle>Реквизиты для пополнения</DialogTitle>
+                        <DialogTitle>Пополнение картой</DialogTitle>
                         <DialogDescription>
                           Переведите {depositAmount} ₽ на указанную карту и отправьте заявку
                         </DialogDescription>
@@ -427,6 +428,50 @@ export default function Index() {
                           <p>3. Ожидайте подтверждения (обычно до 10 минут)</p>
                         </div>
                         <Button onClick={handleDeposit} className="w-full gradient-primary">
+                          Отправить заявку на {depositAmount} ₽
+                        </Button>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                  
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button variant="outline" className="flex-1 border-orange-500/20 bg-orange-500/10">
+                        <Icon name="Bitcoin" size={18} className="mr-2" />
+                        Крипта
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="bg-[#1e2536] border-primary/20">
+                      <DialogHeader>
+                        <DialogTitle>Пополнение криптовалютой</DialogTitle>
+                        <DialogDescription>
+                          Переведите эквивалент {depositAmount} ₽ в USDT (TRC20)
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4 py-4">
+                        <Card className="p-4 bg-orange-500/10 border-orange-500/20">
+                          <p className="text-sm text-muted-foreground mb-2">USDT (TRC20) адрес:</p>
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm font-mono font-bold break-all">TCsPUz224FVCyxEUA2VKSzpyFoh1fRuStX</p>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                navigator.clipboard.writeText('TCsPUz224FVCyxEUA2VKSzpyFoh1fRuStX');
+                                toast.success('Адрес скопирован');
+                              }}
+                            >
+                              <Icon name="Copy" size={16} />
+                            </Button>
+                          </div>
+                        </Card>
+                        <div className="text-sm text-muted-foreground space-y-1">
+                          <p>1. Переведите USDT на адрес выше (только TRC20!)</p>
+                          <p>2. Нажмите кнопку "Отправить заявку"</p>
+                          <p>3. Ожидайте подтверждения транзакции</p>
+                          <p className="text-xs text-orange-400">⚠️ Минимальная сумма: эквивалент {MIN_DEPOSIT} ₽</p>
+                        </div>
+                        <Button onClick={handleDeposit} className="w-full bg-gradient-to-r from-orange-500 to-yellow-500">
                           Отправить заявку на {depositAmount} ₽
                         </Button>
                       </div>
