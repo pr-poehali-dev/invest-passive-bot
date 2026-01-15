@@ -342,17 +342,17 @@ export default function Index() {
               <Card className="p-4 bg-gradient-to-br from-purple-500/10 to-pink-500/10 border-purple-500/20 hover:scale-105 transition-transform">
                 <div className="flex items-center gap-2 mb-2">
                   <Icon name="Wallet" size={16} className="text-purple-400" />
-                  <p className="text-xs text-muted-foreground">Баланс</p>
+                  <p className="text-xs text-muted-foreground">Вложено</p>
                 </div>
-                <p className="text-2xl font-bold">{balance.toFixed(2)} ₽</p>
+                <p className="text-2xl font-bold">{invested.toFixed(2)} ₽</p>
               </Card>
 
               <Card className="p-4 bg-gradient-to-br from-pink-500/10 to-orange-500/10 border-pink-500/20 hover:scale-105 transition-transform">
                 <div className="flex items-center gap-2 mb-2">
                   <Icon name="TrendingUp" size={16} className="text-pink-400" />
-                  <p className="text-xs text-muted-foreground">Прибыль 24ч</p>
+                  <p className="text-xs text-muted-foreground">Заработано</p>
                 </div>
-                <p className="text-2xl font-bold">{dailyProfit.toFixed(2)} ₽</p>
+                <p className="text-2xl font-bold">{earnedBalance.toFixed(2)} ₽</p>
               </Card>
 
               <Card className="p-4 bg-gradient-to-br from-blue-500/10 to-purple-500/10 border-blue-500/20 hover:scale-105 transition-transform">
@@ -560,10 +560,10 @@ export default function Index() {
             <Card className="p-6 bg-card/50 backdrop-blur-lg border-primary/10">
               <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                 <Icon name="TrendingUp" size={20} className="text-green-400" />
-                Вложить заработанное
+                Реинвестировать заработанное
               </h3>
               <p className="text-sm text-muted-foreground mb-4">
-                Вложите заработанные проценты обратно в портфель для увеличения дохода
+                Вложите заработанные проценты обратно в портфель. После реинвестирования эти средства начнут приносить дополнительный доход.
               </p>
               <div className="space-y-4">
                 <div>
@@ -586,7 +586,7 @@ export default function Index() {
                   disabled={earnedBalance < 250}
                 >
                   <Icon name="PlusCircle" size={18} className="mr-2" />
-                  Вложить {investEarningsAmount} ₽ в портфель
+                  Реинвестировать {investEarningsAmount} ₽
                 </Button>
               </div>
             </Card>
@@ -600,7 +600,7 @@ export default function Index() {
                   Пополненный баланс
                 </h3>
                 <p className="text-3xl font-bold mb-1">{balance.toFixed(2)} ₽</p>
-                <p className="text-xs text-muted-foreground">Не начисляет проценты</p>
+                <p className="text-xs text-muted-foreground">Начисляет проценты, нельзя вывести</p>
               </Card>
               
               <Card className="p-6 bg-gradient-to-br from-blue-500/10 to-purple-500/10 border-blue-500/20">
